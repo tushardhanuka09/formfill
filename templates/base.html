@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AcSIR Research Survey | Screen Use Behaviour{% endblock %}</title>
+    <!-- Tailwind CSS CDN for modern, clean, responsive UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
+            background-color: #f8fafc;
+        }
+        .hindi-text {
+            font-family: 'Noto Sans Devanagari', sans-serif;
+        }
+        .custom-radio:checked, .custom-checkbox:checked {
+            background-color: #1d4ed8;
+            border-color: #1d4ed8;
+        }
+        .option-label:hover {
+            background-color: #f1f5f9;
+        }
+        .option-label:has(input:checked) {
+            background-color: #eff6ff;
+            border-color: #3b82f6;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col justify-between">
+    <div class="flex-grow">
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer class="mt-12 py-6 border-t border-slate-200 bg-white text-center text-xs text-slate-500">
+        <p class="font-medium text-slate-600">Societal Program: Problem Understanding and Analysis (AcSIR-04-SP)</p>
+        <p class="mt-1">AcSIR &bull; CSIR-Central Drug Research Institute (CDRI), Lucknow &bull; Jigyasa</p>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
+

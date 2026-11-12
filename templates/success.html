@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-12 sm:py-20 text-center">
+    <!-- Success Card -->
+    <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 sm:p-12">
+        <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+            </svg>
+        </div>
+
+        <span class="inline-block bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-3">
+            AcSIR-04-SP &bull; {{ submission.submission_id }}
+        </span>
+
+        <h1 class="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">
+            Survey Submitted Successfully!
+        </h1>
+        <h2 class="text-lg sm:text-xl font-semibold text-blue-700 hindi-text mb-6">
+            सर्वेक्षण सफलतापूर्वक दर्ज कर लिया गया है।
+        </h2>
+
+        <div class="bg-slate-50 rounded-2xl p-4 sm:p-6 mb-8 text-left border border-slate-200 text-sm">
+            <div class="flex justify-between py-1.5 border-b border-slate-200/70">
+                <span class="text-slate-500 font-medium">Participant / प्रतिभागी:</span>
+                <span class="text-slate-800 font-semibold">{{ submission.participant_name }}</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b border-slate-200/70">
+                <span class="text-slate-500 font-medium">Submission ID:</span>
+                <span class="text-slate-800 font-mono font-semibold">{{ submission.submission_id }}</span>
+            </div>
+            <div class="flex justify-between py-1.5">
+                <span class="text-slate-500 font-medium">Date & Time / दिनांक:</span>
+                <span class="text-slate-800 font-medium">{{ submission.submitted_at }}</span>
+            </div>
+        </div>
+
+        <!-- Download Button -->
+        <a href="{{ url_for('download_pdf', submission_id=submission.submission_id) }}" 
+           class="w-full inline-flex items-center justify-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl transition transform hover:-translate-y-0.5 text-base sm:text-lg mb-4">
+            <svg class="w-6 h-6 mr-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+            Download Filled PDF / भरा हुआ फॉर्म डाउनलोड करें
+        </a>
+
+        <p class="text-xs text-slate-500 mb-8 leading-relaxed">
+            This PDF is an exact replica of the official 9-page research survey document, with your responses marked inside the boxes.
+        </p>
+
+        <div class="pt-6 border-t border-slate-200 flex flex-col sm:flex-row justify-center gap-4">
+            <a href="{{ url_for('survey_form') }}" class="text-sm font-semibold text-blue-600 hover:text-blue-800 py-2">
+                &larr; Fill Another Response / नया फॉर्म भरें
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

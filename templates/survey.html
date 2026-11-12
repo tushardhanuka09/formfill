@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+    <!-- Header Banner Card -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+        <div class="p-4 sm:p-6 bg-slate-50 flex justify-center border-b border-slate-100">
+            <img src="{{ url_for('static', filename='images/header_banner.png') }}" alt="AcSIR CSIR-CDRI Jigyasa" class="max-h-24 sm:max-h-28 object-contain w-auto">
+        </div>
+        <div class="p-6 sm:p-8">
+            <span class="inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider mb-2">
+                AcSIR-04-SP
+            </span>
+            <h1 class="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">
+                {{ metadata.title_en }}
+            </h1>
+            <h2 class="text-lg sm:text-xl font-semibold text-blue-700 hindi-text mt-1">
+                {{ metadata.title_hi }}
+            </h2>
+
+            <!-- Instructions Box -->
+            <div class="mt-5 p-4 rounded-xl bg-blue-50/70 border border-blue-200 text-slate-700 text-sm leading-relaxed">
+                <p class="font-semibold text-blue-900 mb-1 flex items-center">
+                    <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                    Instructions / निर्देश:
+                </p>
+                <p class="text-slate-700">{{ metadata.instructions_en }}</p>
+                <p class="hindi-text text-slate-600 mt-2 text-xs sm:text-sm">{{ metadata.instructions_hi }}</p>
+            </div>
+
+            <!-- View Infographic Poster toggle -->
+            <div class="mt-4">
+                <button type="button" onclick="togglePoster()" class="inline-flex items-center text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    <span id="poster-toggle-text">View Research Awareness Poster / पोस्टर देखें</span>
+                </button>
+                <div id="poster-container" class="hidden mt-4 p-2 bg-slate-100 rounded-xl border border-slate-200">
+                    <img src="{{ url_for('static', filename='images/poster.png') }}" alt="Survey Awareness Poster" class="w-full max-w-xl mx-auto rounded-lg shadow-md">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Survey Form -->
+    <form id="surveyForm" method="POST" action="{{ url_for('submit_survey') }}">
+        <!-- Participant Details Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 mb-6">
+            <h3 class="text-base font-bold text-slate-800 flex items-center mb-4">
+                <span class="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold mr-2.5">
+                    👤
+                </span>
+                Participant Information / प्रतिभागी का विवरण
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                        Full Name / पूरा नाम <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" name="participant_name" required placeholder="e.g. Rahul Sharma" 
+                           class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                        Contact / Email / Roll No. (Optional / वैकल्पिक)
+                    </label>
+                    <input type="text" name="participant_contact" placeholder="e.g. 9876543210 or email" 
+                           class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                </div>
+            </div>
+        </div>
+
+        <!-- Sections Loop -->
+        {% for section in sections %}
+        <div class="mb-8">
+            <!-- Section Header Banner -->
+            <div class="bg-gradient-to-r from-blue-700 to-indigo-800 text-white px-5 py-3.5 rounded-xl shadow-sm mb-4">
+                <h3 class="text-sm sm:text-base font-bold tracking-wide uppercase">
+                    {{ section.title_en }}
+                </h3>
+                <h4 class="text-xs sm:text-sm font-medium text-blue-100 hindi-text">
+                    {{ section.title_hi }}
+                </h4>
+            </div>
+
+            <!-- Questions in this Section -->
+            <div class="space-y-4">
+                {% for q in questions if q.id in section.question_ids %}
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 sm:p-6" id="card_{{ q.id }}">
+                    <div class="flex items-start justify-between">
+                        <div class="mb-3">
+                            <span class="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded mr-1">
+                                Q{{ q.number }}
+                            </span>
+                            <span class="text-sm sm:text-base font-semibold text-slate-900">
+                                {{ q.text_en }}
+                            </span>
+                            <div class="text-xs sm:text-sm font-medium text-slate-600 hindi-text mt-0.5">
+                                {{ q.text_hi }}
+                            </div>
+                        </div>
+                        {% if q.required %}
+                        <span class="text-red-500 text-xs font-bold ml-2 shrink-0" title="Required">*</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Options -->
+                    <div class="mt-3 space-y-2">
+                        {% for opt in q.options %}
+                        <label class="option-label flex items-start p-3 rounded-lg border border-slate-200 cursor-pointer transition">
+                            {% if q.type == 'radio' %}
+                            <input type="radio" name="{{ q.id }}" value="{{ opt.value }}" 
+                                   {% if q.required %}required{% endif %}
+                                   class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 custom-radio shrink-0">
+                            {% else %}
+                            <input type="checkbox" name="{{ q.id }}[]" value="{{ opt.value }}" 
+                                   class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded custom-checkbox shrink-0">
+                            {% endif %}
+                            <div class="ml-3 text-sm">
+                                <span class="font-medium text-slate-800">{{ opt.text_en }}</span>
+                                <span class="text-slate-500 mx-1">/</span>
+                                <span class="text-slate-600 hindi-text">{{ opt.text_hi }}</span>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Submit Button Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 text-center sticky bottom-4 z-20 shadow-lg">
+            <button type="submit" 
+                    class="w-full sm:w-auto px-10 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center mx-auto text-base">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                Submit Survey / सर्वेक्षण जमा करें
+            </button>
+            <p class="text-xs text-slate-500 mt-2">
+                After submission, your completed survey PDF will be generated immediately for download.
+            </p>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function togglePoster() {
+        const c = document.getElementById('poster-container');
+        const t = document.getElementById('poster-toggle-text');
+        if (c.classList.contains('hidden')) {
+            c.classList.remove('hidden');
+            t.innerText = 'Hide Awareness Poster / पोस्टर छुपाएं';
+        } else {
+            c.classList.add('hidden');
+            t.innerText = 'View Research Awareness Poster / पोस्टर देखें';
+        }
+    }
+</script>
+{% endblock %}
+
