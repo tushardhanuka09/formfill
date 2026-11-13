@@ -100,7 +100,8 @@ def admin_dashboard():
     if not session.get("is_admin"):
         return redirect(url_for("admin_login"))
     submissions = storage.get_all_submissions()
-    return render_template("admin.html", submissions=submissions)
+    db_status = storage.get_db_status()
+    return render_template("admin.html", submissions=submissions, db_status=db_status)
 
 @app.route("/admin/export/excel")
 def admin_export_excel():

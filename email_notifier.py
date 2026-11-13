@@ -1,5 +1,5 @@
 """
-Optional Email Notification Module
+Email Notification Module
 Sends an email with the completed 9-page survey PDF attached
 whenever a new response is submitted.
 """
@@ -10,22 +10,19 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 
+DEFAULT_RECIPIENT = "dhanukatushar9@gmail.com"
+
 def send_submission_email(submission_data, pdf_path):
     """
-    Sends an email with the filled PDF attached.
-    Reads config from environment variables (configured in Render or .env):
-      - SMTP_HOST (default: smtp.gmail.com)
-      - SMTP_PORT (default: 587)
-      - SMTP_USER (e.g. your-email@gmail.com)
-      - SMTP_PASS (e.g. 16-character Gmail App Password)
-      - NOTIFICATION_EMAIL (where forms should be delivered, e.g. dhanukatushar09@gmail.com)
+    Sends an email with the filled PDF attached to dhanukatushar9@gmail.com.
     """
-    smtp_user = os.environ.get("SMTP_USER")
-    smtp_pass = os.environ.get("SMTP_PASS")
-    recipient = os.environ.get("NOTIFICATION_EMAIL", smtp_user)
+    smtp_user = os.environ.get("SMTP_USER", DEFAULT_RECIPIENT).strip()
+    smtp_pass = os.environ.get("SMTP_PASS", "").strip()
+    recipient = os.environ.get("NOTIFICATION_EMAIL", DEFAULT_RECIPIENT).strip()
 
-    # If no email credentials configured, skip silently
-    if not smtp_user or not smtp_pass or not recipient:
+    # If no app password configured, skip
+    if not smtp_pass:
+        print("Email notification skipped: SMTP_PASS (Gmail App Password) not set in Environment.")
         return False
 
     smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -44,12 +41,13 @@ A new survey response has been submitted for the AcSIR Societal Program (AcSIR-0
 "Screen Use Behaviour, Digital Habits and Visual Well-being"
 
 Submission Details:
-- Submission ID: {sub_id}
-- Participant Name: {p_name}
-- Contact / Roll No: {p_contact}
-- Submitted At: {sub_date}
+-------------------
+• Submission ID: {sub_id}
+• Participant Name: {p_name}
+• Contact / Roll No: {p_contact}
+• Submitted At: {sub_date}
 
-The completed 9-page filled survey form is attached to this email.
+The completed 9-page survey form with all checked boxes is attached to this email.
 
 ---
 AcSIR Research Survey Automated System
@@ -59,7 +57,7 @@ AcSIR Research Survey Automated System
     msg["From"] = smtp_user
     msg["To"] = recipient
     msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
+    msg.attach(MIMEText(body, "plain", "utf-8"))
 
     if pdf_path and os.path.exists(pdf_path):
         filename = os.path.basename(pdf_path)
@@ -69,14 +67,13 @@ AcSIR Research Survey Automated System
         msg.attach(part)
 
     try:
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
         server.starttls()
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
         server.quit()
-        print(f"Email sent successfully for {sub_id} to {recipient}")
+        print(f"SUCCESS: Email sent for {sub_id} to {recipient}")
         return True
     except Exception as e:
-        print(f"Failed to send email notification: {e}")
+        print(f"ERROR: Failed to send email notification: {e}")
         return False
-

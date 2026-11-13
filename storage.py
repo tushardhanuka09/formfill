@@ -1,7 +1,7 @@
 """
 Data Storage & Submission Management
 Supports both SQLite (local default) and PostgreSQL (for persistent cloud storage on Render).
-Includes on-the-fly PDF generation so forms can always be downloaded individually or in ZIP.
+Includes on-the-fly PDF generation and database diagnostics.
 """
 
 import os
@@ -21,19 +21,55 @@ DB_PATH = os.path.join(DATA_DIR, "survey.db")
 EXCEL_PATH = os.path.join(DATA_DIR, "all_responses.xlsx")
 CSV_PATH = os.path.join(DATA_DIR, "all_responses.csv")
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+def get_raw_database_url():
+    url = os.environ.get("DATABASE_URL", "").strip().strip("'").strip('"')
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url
 
 def is_postgres():
-    return bool(DATABASE_URL)
+    return bool(get_raw_database_url())
+
+def get_db_status():
+    """Returns database type and connection health for admin dashboard."""
+    raw_url = get_raw_database_url()
+    if not raw_url:
+        return {
+            "type": "SQLite (Temporary Storage)",
+            "is_permanent": False,
+            "message": "Temporary storage. Connect DATABASE_URL in Render to make permanent."
+        }
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        conn.close()
+        return {
+            "type": "PostgreSQL (Permanent Cloud Storage)",
+            "is_permanent": True,
+            "message": "Connected successfully! All survey responses are permanently preserved."
+        }
+    except Exception as e:
+        return {
+            "type": "PostgreSQL Connection Error",
+            "is_permanent": False,
+            "message": f"Connection failed: {str(e)}"
+        }
 
 def get_connection():
-    if is_postgres():
+    raw_url = get_raw_database_url()
+    if raw_url:
         import psycopg2
         import psycopg2.extras
-        conn = psycopg2.connect(DATABASE_URL)
-        return conn
+        # Try normal connect, or with sslmode=require if needed
+        try:
+            conn = psycopg2.connect(raw_url)
+            return conn
+        except Exception as e:
+            if "sslmode" not in raw_url.lower():
+                delim = "&" if "?" in raw_url else "?"
+                return psycopg2.connect(raw_url + delim + "sslmode=require")
+            raise e
     else:
         os.makedirs(DATA_DIR, exist_ok=True)
         os.makedirs(PDF_DIR, exist_ok=True)
@@ -44,34 +80,37 @@ def get_connection():
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(PDF_DIR, exist_ok=True)
-    conn = get_connection()
-    cur = conn.cursor()
-    if is_postgres():
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS submissions (
-                id SERIAL PRIMARY KEY,
-                submission_id TEXT UNIQUE,
-                participant_name TEXT,
-                participant_contact TEXT,
-                submitted_at TEXT,
-                answers_json TEXT,
-                pdf_path TEXT
-            )
-        """)
-    else:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS submissions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                submission_id TEXT UNIQUE,
-                participant_name TEXT,
-                participant_contact TEXT,
-                submitted_at TEXT,
-                answers_json TEXT,
-                pdf_path TEXT
-            )
-        """)
-    conn.commit()
-    conn.close()
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        if is_postgres():
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS submissions (
+                    id SERIAL PRIMARY KEY,
+                    submission_id TEXT UNIQUE,
+                    participant_name TEXT,
+                    participant_contact TEXT,
+                    submitted_at TEXT,
+                    answers_json TEXT,
+                    pdf_path TEXT
+                )
+            """)
+        else:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS submissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    submission_id TEXT UNIQUE,
+                    participant_name TEXT,
+                    participant_contact TEXT,
+                    submitted_at TEXT,
+                    answers_json TEXT,
+                    pdf_path TEXT
+                )
+            """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print("Database initialization error:", e)
 
 def _format_answer_readable(qid, val):
     q = QUESTION_MAP.get(qid)
@@ -193,7 +232,7 @@ def get_all_submissions():
 def ensure_pdf_exists(sub):
     """
     Ensures that the filled PDF for a submission exists on disk.
-    If it was deleted (e.g. after Render container sleep), regenerates it on-the-fly!
+    If missing (e.g. after container restart), regenerates it dynamically!
     """
     os.makedirs(PDF_DIR, exist_ok=True)
     safe_name = "".join([c for c in sub["participant_name"] if c.isalnum() or c in " _-"]).strip() or "Participant"
@@ -239,10 +278,6 @@ def update_excel_export():
         print("Excel write exception (CSV saved):", e)
 
 def create_zip_of_all_pdfs():
-    """
-    Zips all generated PDFs. If any PDF is missing from disk,
-    regenerates it dynamically from the database record!
-    """
     subs = get_all_submissions()
     mem_zip = io.BytesIO()
     with zipfile.ZipFile(mem_zip, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
