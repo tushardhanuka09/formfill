@@ -1,7 +1,7 @@
 """
 Data Storage & Submission Management
-Persists survey responses in SQLite, updates an Excel workbook,
-and organizes individual PDF copies.
+Supports both SQLite (local default) and PostgreSQL (for persistent cloud storage on Render).
+Includes on-the-fly PDF generation so forms can always be downloaded individually or in ZIP.
 """
 
 import os
@@ -18,57 +18,84 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 PDF_DIR = os.path.join(DATA_DIR, "filled_pdfs")
 DB_PATH = os.path.join(DATA_DIR, "survey.db")
-CSV_PATH = os.path.join(DATA_DIR, "all_responses.csv")
 EXCEL_PATH = os.path.join(DATA_DIR, "all_responses.xlsx")
+CSV_PATH = os.path.join(DATA_DIR, "all_responses.csv")
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+def is_postgres():
+    return bool(DATABASE_URL)
+
+def get_connection():
+    if is_postgres():
+        import psycopg2
+        import psycopg2.extras
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn
+    else:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        os.makedirs(PDF_DIR, exist_ok=True)
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(PDF_DIR, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS submissions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            submission_id TEXT UNIQUE,
-            participant_name TEXT,
-            participant_contact TEXT,
-            submitted_at TEXT,
-            answers_json TEXT,
-            pdf_path TEXT
-        )
-    """)
+    if is_postgres():
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS submissions (
+                id SERIAL PRIMARY KEY,
+                submission_id TEXT UNIQUE,
+                participant_name TEXT,
+                participant_contact TEXT,
+                submitted_at TEXT,
+                answers_json TEXT,
+                pdf_path TEXT
+            )
+        """)
+    else:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS submissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                submission_id TEXT UNIQUE,
+                participant_name TEXT,
+                participant_contact TEXT,
+                submitted_at TEXT,
+                answers_json TEXT,
+                pdf_path TEXT
+            )
+        """)
     conn.commit()
     conn.close()
 
 def _format_answer_readable(qid, val):
-    """Converts value(s) into human-readable text."""
     q = QUESTION_MAP.get(qid)
     if not q or not val:
         return ""
-    
     val_to_text = {opt["value"]: f"{opt['text_en']} / {opt['text_hi']}" for opt in q["options"]}
-    
     if isinstance(val, list):
         return "; ".join([val_to_text.get(v, v) for v in val])
     return val_to_text.get(val, val)
 
 def save_submission(participant_name, participant_contact, answers):
-    """
-    Saves a new submission, generates its official filled PDF,
-    and updates the database and Excel file.
-    """
     init_db()
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     cur = conn.cursor()
 
     cur.execute("SELECT COUNT(*) FROM submissions")
-    count = cur.fetchone()[0] + 1
-    
+    row = cur.fetchone()
+    count = (row[0] if isinstance(row, tuple) else row["COUNT(*)"] if "COUNT(*)" in row else row[0]) + 1
+
     now = datetime.datetime.now()
     date_str = now.strftime("%Y-%m-%d %H:%M")
     date_code = now.strftime("%Y%m%d")
     sub_id = f"RESP-{date_code}-{count:03d}"
-    
+
     clean_name = (participant_name or "Anonymous").strip()
     safe_name = "".join([c for c in clean_name if c.isalnum() or c in " _-"]).strip() or "Participant"
     pdf_filename = f"{sub_id}_{safe_name}.pdf"
@@ -83,7 +110,10 @@ def save_submission(participant_name, participant_contact, answers):
     }
 
     # Generate and save filled PDF
-    generate_filled_pdf(submission_dict, output_path=pdf_full_path)
+    try:
+        generate_filled_pdf(submission_dict, output_path=pdf_full_path)
+    except Exception as e:
+        print("PDF generation error:", e)
 
     # Optional: Send automatic email with attached PDF (if SMTP configured)
     try:
@@ -92,11 +122,13 @@ def save_submission(participant_name, participant_contact, answers):
     except Exception as e:
         print("Email notify skipped/error:", e)
 
-    # Insert into SQLite
-    cur.execute("""
+    # Insert into Database
+    placeholder = "%s" if is_postgres() else "?"
+    query = f"""
         INSERT INTO submissions (submission_id, participant_name, participant_contact, submitted_at, answers_json, pdf_path)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (
+        VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+    """
+    cur.execute(query, (
         sub_id,
         clean_name,
         participant_contact,
@@ -107,8 +139,11 @@ def save_submission(participant_name, participant_contact, answers):
     conn.commit()
     conn.close()
 
-    # Rebuild Excel summary
-    update_excel_export()
+    # Rebuild Excel & CSV
+    try:
+        update_excel_export()
+    except Exception as e:
+        print("Excel update error:", e)
 
     return {
         "submission_id": sub_id,
@@ -120,10 +155,14 @@ def save_submission(participant_name, participant_contact, answers):
 
 def get_submission(submission_id):
     init_db()
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM submissions WHERE submission_id = ?", (submission_id,))
+    conn = get_connection()
+    if is_postgres():
+        import psycopg2.extras
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM submissions WHERE submission_id = %s", (submission_id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM submissions WHERE submission_id = ?", (submission_id,))
     row = cur.fetchone()
     conn.close()
     if row:
@@ -134,10 +173,14 @@ def get_submission(submission_id):
 
 def get_all_submissions():
     init_db()
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM submissions ORDER BY id DESC")
+    conn = get_connection()
+    if is_postgres():
+        import psycopg2.extras
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM submissions ORDER BY id DESC")
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM submissions ORDER BY id DESC")
     rows = cur.fetchall()
     conn.close()
     results = []
@@ -147,14 +190,33 @@ def get_all_submissions():
         results.append(d)
     return results
 
+def ensure_pdf_exists(sub):
+    """
+    Ensures that the filled PDF for a submission exists on disk.
+    If it was deleted (e.g. after Render container sleep), regenerates it on-the-fly!
+    """
+    os.makedirs(PDF_DIR, exist_ok=True)
+    safe_name = "".join([c for c in sub["participant_name"] if c.isalnum() or c in " _-"]).strip() or "Participant"
+    pdf_filename = f"{sub['submission_id']}_{safe_name}.pdf"
+    pdf_path = os.path.join(PDF_DIR, pdf_filename)
+    
+    if not os.path.exists(pdf_path):
+        submission_dict = {
+            "submission_id": sub["submission_id"],
+            "participant_name": sub["participant_name"],
+            "participant_contact": sub.get("participant_contact", ""),
+            "submitted_at": sub.get("submitted_at", ""),
+            "answers": sub.get("answers", {})
+        }
+        generate_filled_pdf(submission_dict, output_path=pdf_path)
+    return pdf_path
+
 def update_excel_export():
-    """Generates an up-to-date Excel and CSV sheet with all answers in neat columns."""
     subs = get_all_submissions()
     if not subs:
         return
-    
     rows = []
-    for s in reversed(subs): # chronological
+    for s in reversed(subs):
         row = {
             "Submission ID": s["submission_id"],
             "Submitted At": s["submitted_at"],
@@ -169,6 +231,7 @@ def update_excel_export():
         rows.append(row)
 
     df = pd.DataFrame(rows)
+    os.makedirs(DATA_DIR, exist_ok=True)
     df.to_csv(CSV_PATH, index=False, encoding="utf-8-sig")
     try:
         df.to_excel(EXCEL_PATH, index=False)
@@ -176,13 +239,16 @@ def update_excel_export():
         print("Excel write exception (CSV saved):", e)
 
 def create_zip_of_all_pdfs():
-    """Zips all generated PDFs and returns memory bytes."""
+    """
+    Zips all generated PDFs. If any PDF is missing from disk,
+    regenerates it dynamically from the database record!
+    """
+    subs = get_all_submissions()
     mem_zip = io.BytesIO()
     with zipfile.ZipFile(mem_zip, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        if os.path.exists(PDF_DIR):
-            for fname in os.listdir(PDF_DIR):
-                if fname.endswith(".pdf"):
-                    fpath = os.path.join(PDF_DIR, fname)
-                    zf.write(fpath, arcname=fname)
+        for s in subs:
+            pdf_path = ensure_pdf_exists(s)
+            if os.path.exists(pdf_path):
+                zf.write(pdf_path, arcname=os.path.basename(pdf_path))
     mem_zip.seek(0)
     return mem_zip.getvalue()

@@ -61,13 +61,18 @@ def thank_you(submission_id):
 def download_pdf(submission_id):
     """Downloads an individual respondent's filled PDF form."""
     sub = storage.get_submission(submission_id)
-    if not sub or not os.path.exists(sub["pdf_path"]):
+    if not sub:
+        return "Submission not found", 404
+    
+    # Automatically regenerates the PDF on the fly if container restarted!
+    pdf_path = storage.ensure_pdf_exists(sub)
+    if not os.path.exists(pdf_path):
         return "PDF not found for this response", 404
     
     clean_name = "".join([c for c in sub["participant_name"] if c.isalnum() or c in " _-"]).strip()
     download_name = f"AcSIR_Survey_{sub['submission_id']}_{clean_name}.pdf"
     return send_file(
-        sub["pdf_path"],
+        pdf_path,
         as_attachment=True,
         download_name=download_name,
         mimetype="application/pdf"

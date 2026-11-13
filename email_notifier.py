@@ -79,3 +79,4 @@ AcSIR Research Survey Automated System
     except Exception as e:
         print(f"Failed to send email notification: {e}")
         return False
+

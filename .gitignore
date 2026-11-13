@@ -11,3 +11,4 @@ data/all_responses.xlsx
 data/all_responses.csv
 data/filled_pdfs/*.pdf
 !sample_completed_survey.pdf
+
